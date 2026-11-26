@@ -730,10 +730,70 @@ function esc(t){
     return String(t || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATION — NGO Expiry Reminders in Chronological Order
+// First mail: Sent shortly after approval, highlighting food available with more time remaining
+// Second mail: Sent 45 seconds later, highlighting that food is nearing expiry (less time remaining)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function notifyNgoExpiryReminder(food, ngoEmails) {
+    if (!ngoEmails || ngoEmails.length === 0) return;
+
+    const expiresDate = new Date(food.expires);
+    const expires = expiresDate.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+
+    const headerTitle = "Urgent: Claim Unclaimed Food Before 30 Mins of Expiry";
+    const subject = `Hurry! Claim ${food.name} (${food.servings} servings) before 30 mins of expiry — FoodLink`;
+
+    const body = `
+    <p style="margin:0 0 18px;">Dear NGO Partner,</p>
+    <p style="margin:0 0 18px;font-size:16px;color:#dc2626;font-weight:700;">This food listing is still unclaimed! Please claim it before 30 minutes of expiry time (Expires: ${expires}).</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
+      <tr>
+        <td style="background:#fef2f2;border:1px solid #fecaca;border-radius:5px;padding:20px;text-align:center;">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#dc2626;letter-spacing:1.5px;text-transform:uppercase;">Unclaimed Food Reminder</p>
+          <p style="margin:0 0 8px;font-size:24px;font-weight:800;color:#991b1b;">${esc(food.name)}</p>
+          <p style="margin:0;font-size:40px;font-weight:900;color:#dc2626;line-height:1;">${food.servings}</p>
+          <p style="margin:4px 0 0;font-size:12px;font-weight:700;color:#6b7280;letter-spacing:1px;text-transform:uppercase;">Meals Still Available</p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:1px;">Listing Summary</p>
+    ${detailTable([
+        ["Food Item", `<strong>${esc(food.name)}</strong>`],
+        ["Servings", `<strong>${food.servings} meals</strong>`],
+        ["Pickup Address", `<strong>${esc(food.address)}</strong>`],
+        ["Expires At", `<span style="color:#dc2626;font-weight:700;">${expires}</span>`]
+    ])}
+
+    ${alertBox(`<strong>Urgent Claim Required:</strong> Please claim this unclaimed food before 30 minutes of expiry so it can be picked up and served to people in need.`, { bg: "#fef2f2", border: "#dc2626", color: "#991b1b" })}
+
+    <p style="margin:18px 0 0;font-size:13px;color:#6b7280;">Thank you for your prompt response and partnership with FoodLink.</p>`;
+
+    return await sendMail({
+        to: ngoEmails,
+        subject,
+        html: layout({
+            headerColor: "#dc2626",
+            headerLabel: "Urgent Unclaimed Food Reminder",
+            title: headerTitle,
+            preheader: `Hurry! Claim ${food.name} (${food.servings} servings) before 30 mins of expiry.`,
+            body,
+            ctaText: "Claim This Food Now",
+            ctaUrl: `${appUrl}/home.html`
+        })
+    });
+}
+
 module.exports = {
     notifyAdminNewDonation,
     notifyInspectorAssignment,
     notifyNgosBulkFoodAvailable,
+    notifyNgoExpiryReminder,
     notifyNgosNewDonationListed,
     notifyNgosFoodReminder,
     notifyInspectorPassedTask,
