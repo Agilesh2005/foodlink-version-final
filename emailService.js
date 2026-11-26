@@ -2,7 +2,6 @@ require("dotenv").config();
 const { Resend } = require("resend");
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-
 const fromEmail = process.env.FROM_EMAIL || "FoodLink <agileshnv2005@gmail.com>";
 
 const DEFAULT_APP_URL = "https://apexinterview.in";
