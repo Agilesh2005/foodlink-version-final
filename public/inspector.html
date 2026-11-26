@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspections</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="hdr"></header>
+
+    <h2>WAITING FOR INSPECTION</h2>
+    <p class="center">Go to the pickup location, taste the food, then approve or reject it.</p>
+    <div class="container" id="pending"></div>
+
+    <h2>ALREADY INSPECTED</h2>
+    <table>
+        <thead>
+            <tr><th>Food</th><th>Donor</th><th>Address</th><th>Result</th><th>Status / Claimed By</th><th>Note</th><th>When</th></tr>
+        </thead>
+        <tbody id="done"></tbody>
+    </table>
+    <br><br>
+
+    <script src="app.js"></script>
+    <script>
+        start();
+
+        async function start(){
+            let me = await requireRole("inspector");    // only the inspector can see this page
+            if(me == null){ return; }
+            showNav();
+            show();
+        }
+
+        async function show(){
+            let data = await api("/api/inspections");
+            let html = "";
+            let rows = "";
+
+            for(let i=0;i<data.pending.length;i++){
+                let f = data.pending[i];
+                let assignedBadge = f.assignedInspector ? '<div style="margin-bottom:6px;"><span class="badge approved">📍 Assigned to You</span></div>' : '';
+
+                // NEW: if this task was already passed once, only Accept / Reject are shown
+                let passedBadge = f.passedBy ? '<div style="margin-bottom:6px;"><span class="badge pending">↪ Passed to you by '+esc(f.passedBy)+'</span></div>' : '';
+                let passButton = f.passedBy ? '' : '<button class="grey" onclick="passToOther(\''+f._id+'\')" style="width:100%; margin-top:4px; font-size:14px;">Pass to Other Inspector</button>';
+
+                html += '<div class="card">'+
+                    '<h2>'+esc(f.name)+'</h2>'+
+                    assignedBadge+
+                    passedBadge+
+                    '<pre>'+
+                    '<b>SERVINGS :</b> '+f.servings+'\n'+
+                    '<b>TYPE     :</b> '+(f.veg?"Veg":"Non-veg")+' / '+esc(f.nature)+'\n'+
+                    '<b>GO TO    :</b> '+esc(f.address)+'\n'+
+                    '<b>DONOR    :</b> '+esc(f.donor)+' ('+esc(f.phone)+')\n'+
+                    '<b>EXPIRES  :</b> '+fmt(f.expires)+
+                    '</pre>'+
+                    '<input id="n'+f._id+'" type="text" placeholder="Note (required if rejecting)">'+
+                    '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">'+
+                    '<button onclick="decide(\''+f._id+'\',true)" style="flex:1; background-color:#16a34a;">Accept</button> '+
+                    '<button class="red" onclick="decide(\''+f._id+'\',false)" style="flex:1;">Reject</button>'+
+                    passButton+
+                    '</div>'+
+                    '</div>';
+            }
+
+            for(let i=0;i<data.done.length;i++){
+                let f = data.done[i];
+                let isExpired = (f.status === "expired") || (new Date(f.expires) <= new Date() && f.status !== "picked_up");
+                let statusKey = isExpired ? "expired" : f.status;
+
+                let claimerInfo = "";
+                if((statusKey === "claimed" || statusKey === "picked_up") && f.claimer && f.claimer.name){
+                    claimerInfo = '<br><span style="font-size:12px;color:#1e40af;">Claimed by: <b>' + esc(f.claimer.name) + '</b> (' + esc(f.claimer.kind || "NGO") + ')</span>';
+                }
+
+                let statusBadge = "";
+                if(statusKey === "picked_up") statusBadge = '<span class="badge picked_up">Picked Up</span>';
+                else if(statusKey === "expired") statusBadge = '<span class="badge expired">Expired</span>';
+                else if(statusKey === "claimed") statusBadge = '<span class="badge claimed">Yet to Pick Up</span>';
+                else statusBadge = '<span class="badge available">Available</span>';
+
+                rows += '<tr>'+
+                    '<td><b>'+esc(f.name)+'</b></td>'+
+                    '<td>'+esc(f.donor)+'</td>'+
+                    '<td>'+esc(f.address)+'</td>'+
+                    '<td><span class="badge '+f.approval+'">'+f.approval+'</span></td>'+
+                    '<td>'+statusBadge+claimerInfo+'</td>'+
+                    '<td>'+(f.inspectNote ? esc(f.inspectNote) : "-")+'</td>'+
+                    '<td>'+(f.inspectedAt ? fmt(f.inspectedAt) : "-")+'</td>'+
+                    '</tr>';
+            }
+
+            if(html == ""){ html = '<p class="center full">Nothing waiting.</p>'; }
+            document.getElementById("pending").innerHTML = html;
+            document.getElementById("done").innerHTML = rows;
+        }
+
+        async function decide(id, ok){
+            let note = document.getElementById("n"+id).value.trim();
+            if(!ok && note == ""){
+                alert("Please write a reason to reject.");
+                return;
+            }
+            let data = await api("/api/food/"+id+"/inspect", "POST", { ok:ok, note:note });
+            if(!data.ok){
+                alert(data.error);
+                return;
+            }
+            show();
+        }
+
+        async function passToOther(id){
+            if(!confirm("Pass this food inspection task to the other inspector?")){ return; }
+            let res = await api("/api/food/"+id+"/pass", "POST");
+            if(!res.ok){
+                alert(res.error || "Could not pass inspection task.");
+            } else {
+                alert("Task successfully passed to " + res.passedTo + "! Notification email sent.");
+                show();
+            }
+        }
+    </script>
+</body>
+</html>

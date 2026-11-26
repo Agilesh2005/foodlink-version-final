@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodLink</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="hdr"></header>
+
+    <div class="stats" id="stats"></div>
+    <div class="container" id="list"></div>
+
+    <script src="app.js"></script>
+    <script>
+        start();
+
+        async function start(){
+            let me = await requireRole("ngo");     // only NGOs can see this page
+            if(me == null){ return; }
+            showNav();
+
+            // the server only sends food approved by the inspector
+            let food = await api("/api/food/approved");
+
+            // soonest expiry first, so urgent food is on top
+            food.sort(function(a,b){
+                let aa = a.status=="available" ? 0 : 1;
+                let bb = b.status=="available" ? 0 : 1;
+                if(aa!=bb){ return aa-bb; }
+                return new Date(a.expires)-new Date(b.expires);
+            });
+
+            let meals=0, avail=0, html="";
+            for(let i=0;i<food.length;i++){
+                let f=food[i];
+
+                // Auto-expire check
+                let isExpired = (f.status === "expired") || (new Date(f.expires) <= new Date() && f.status !== "picked_up");
+                let statusKey = isExpired ? "expired" : f.status;
+
+                if(statusKey=="picked_up"){ meals += Number(f.servings); }
+                if(statusKey=="available"){ avail++; }
+
+                let btn;
+                let statusBadge = "";
+                let cardClass = "card";
+
+                if(statusKey=="available"){
+                    btn='<button onclick="claim(\''+f._id+'\')">Claim Food</button>';
+                    statusBadge = '<span class="badge available">Available</span>';
+                } else if(statusKey=="claimed"){
+                    btn='<button class="grey" disabled style="background-color:#2563eb;color:white;">Claimed (Awaiting Pickup)</button>';
+                    statusBadge = '<span class="badge claimed">Yet to Pick Up</span>';
+                    cardClass += " status-box-claimed";
+                } else if(statusKey=="picked_up"){
+                    btn='<button class="grey" disabled style="background-color:#16a34a;color:white;">Picked Up</button>';
+                    statusBadge = '<span class="badge picked_up">Picked Up</span>';
+                    cardClass += " status-box-picked";
+                } else {
+                    btn='<button class="red" disabled>Expired</button>';
+                    statusBadge = '<span class="badge expired">Expired</span>';
+                    cardClass += " status-box-expired";
+                }
+
+                // Show who claimed the food for full transparency
+                let claimerInfo = "";
+                if((statusKey=="claimed" || statusKey=="picked_up") && f.claimer && f.claimer.name){
+                    claimerInfo =
+                        '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 10px;margin:8px 0;font-size:13px;line-height:1.5;">'+
+                        '<b style="color:#1e40af;">Claimed By:</b> ' + esc(f.claimer.name) + '<br>'+
+                        '<b>Contact:</b> <a href="tel:' + esc(f.claimer.phone || "") + '" style="color:#2563eb;font-weight:600;">' + esc(f.claimer.phone || "-") + '</a> (' + esc(f.claimer.kind || "NGO") + ')<br>'+
+                        (f.claimedAt ? '<span style="font-size:11px;color:#64748b;">Claimed at: ' + fmt(f.claimedAt) + '</span>' : '')+
+                        '</div>';
+                }
+
+                html += '<div class="' + cardClass + '">'+
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+                    '<h2 style="margin:0;">'+esc(f.name)+'</h2>'+
+                    statusBadge+
+                    '</div>'+
+                    '<pre>'+
+                    '<b>SERVINGS :</b> '+f.servings+'\n'+
+                    '<b>TYPE     :</b> '+(f.veg?"Veg":"Non-veg")+' / '+esc(f.nature)+'\n'+
+                    '<b>PICKUP   :</b> '+esc(f.address)+'\n'+
+                    '<b>EXPIRES  :</b> '+fmt(f.expires)+'\n'+
+                    '<b>DONOR    :</b> '+esc(f.donor)+
+                    '</pre>'+
+                    claimerInfo+
+                    btn+
+                    '</div>';
+            }
+            document.getElementById("list").innerHTML = html;
+            document.getElementById("stats").innerHTML =
+                "<span>Meals saved: <b>"+meals+"</b></span><span>Available now: <b>"+avail+"</b></span><span>Total listings: <b>"+food.length+"</b></span>";
+        }
+
+        function claim(id){
+            sessionStorage.setItem("fid", id);
+            window.location.href="reg.html";
+        }
+    </script>
+</body>
+</html>

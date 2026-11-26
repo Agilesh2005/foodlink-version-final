@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donate Food</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .expiry-quick { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 6px; }
+        .expiry-quick button {
+            flex:1; min-width:90px; padding:8px 10px; font-size:13px; font-weight:600;
+            border:2px solid #d1fae5; background:#f0fdf4; color:#15803d;
+            border-radius:8px; cursor:pointer; transition:all 0.15s;
+        }
+        .expiry-quick button:hover, .expiry-quick button.sel {
+            background:#16a34a; color:#fff; border-color:#16a34a;
+        }
+        .expiry-custom { margin-top:6px; }
+        .expiry-label {
+            font-size:13px; color:#64748b; margin-bottom:4px; display:block;
+        }
+        #expiry-display {
+            font-size:13px; font-weight:600; color:#15803d;
+            margin-left:8px; vertical-align:middle;
+        }
+    </style>
+</head>
+<body>
+    <header id="hdr"></header>
+
+    <div class="box">
+        <h2>ADD SURPLUS FOOD</h2>
+        <p class="center" style="color:#475569; font-size:14px; margin-top:-5px; margin-bottom:15px;">
+            Donor Account: <b id="donor-profile-info" style="color:#14532d;">Loading...</b>
+        </p>
+        <form onsubmit="return addFood(event)">
+            <div class="grid2">
+                <input id="fn" type="text" placeholder="Food name (e.g. Veg Biryani)" required>
+                <input id="fs" type="number" min="1" placeholder="Servings (Number of meals)" required>
+                <select id="fv" required>
+                    <option>Veg</option>
+                    <option>Non-veg</option>
+                </select>
+                <select id="fnat" required>
+                    <option>Freshly cooked</option>
+                    <option>Packaged</option>
+                </select>
+            </div>
+
+            <!-- Expiry Quick Pick -->
+            <span class="expiry-label">⏱ Food valid for how long?<span id="expiry-display"></span></span>
+            <div class="expiry-quick" id="quick-btns">
+                <button type="button" onclick="setExpiry(1,'1 hour')">1 Hour</button>
+                <button type="button" onclick="setExpiry(2,'2 Hours')">2 Hours</button>
+                <button type="button" onclick="setExpiry(4,'4 Hours')">4 Hours</button>
+    
+                <button type="button" onclick="toggleCustom()">📅 Custom</button>
+            </div>
+            <div class="expiry-custom" id="custom-wrap" style="display:none;">
+                <input class="full" id="fe-custom" type="datetime-local" title="Pick exact expiry time">
+            </div>
+            <!-- Hidden actual expiry value submitted -->
+            <input type="hidden" id="fe">
+
+            <input class="full" id="fa" type="text" placeholder="Pickup address / landmark" required style="margin-top:10px;">
+
+            <div class="center" style="margin-top:14px;"><button type="submit">Add Food</button></div>
+        </form>
+    </div>
+
+    <h2>MY LISTINGS</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Food</th>
+                <th>Servings</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Inspection</th>
+                <th>Claimed By</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+    </table>
+
+    <script src="app.js"></script>
+    <script>
+        let me = null;
+        let selectedExpiry = null; // stores the chosen ISO expiry date
+        start();
+
+        async function start(){
+            me = await requireRole("donor");
+            if(me == null){ return; }
+            showNav();
+            let phoneStr = me.phone ? " | Phone: " + me.phone : "";
+            document.getElementById("donor-profile-info").textContent = me.name + " (" + me.email + phoneStr + ")";
+            // Set custom picker min to now
+            let now = new Date();
+            now.setSeconds(0, 0);
+            document.getElementById("fe-custom").min = now.toISOString().slice(0, 16);
+            // Listen for custom date change
+            document.getElementById("fe-custom").addEventListener("change", function(){
+                let d = new Date(this.value);
+                if(d > new Date()){
+                    selectedExpiry = d.toISOString();
+                    document.getElementById("fe").value = selectedExpiry;
+                    document.getElementById("expiry-display").textContent = " — expires " + d.toLocaleString("en-IN", {dateStyle:"medium", timeStyle:"short"});
+                    // Clear quick button selection
+                    document.querySelectorAll("#quick-btns button").forEach(b => b.classList.remove("sel"));
+                }
+            });
+            showRows();
+        }
+
+        function setExpiry(hours, label){
+            let d = new Date(Date.now() + hours * 3600 * 1000);
+            selectedExpiry = d.toISOString();
+            document.getElementById("fe").value = selectedExpiry;
+            document.getElementById("expiry-display").textContent = " — expires " + d.toLocaleString("en-IN", {dateStyle:"medium", timeStyle:"short"});
+            // Highlight selected button
+            document.querySelectorAll("#quick-btns button").forEach(b => b.classList.remove("sel"));
+            event.target.classList.add("sel");
+            // Hide custom picker
+            document.getElementById("custom-wrap").style.display = "none";
+        }
+
+        function toggleCustom(){
+            let wrap = document.getElementById("custom-wrap");
+            let isVisible = wrap.style.display !== "none";
+            wrap.style.display = isVisible ? "none" : "block";
+            document.querySelectorAll("#quick-btns button").forEach(b => b.classList.remove("sel"));
+            if(!isVisible) event.target.classList.add("sel");
+        }
+
+        async function addFood(e){
+            e.preventDefault();
+            if(!selectedExpiry || new Date(selectedExpiry) <= new Date()){
+                alert("Please select a valid expiry time.");
+                return false;
+            }
+
+            let data = await api("/api/food", "POST", {
+                name: document.getElementById("fn").value,
+                servings: Number(document.getElementById("fs").value),
+                veg: document.getElementById("fv").value == "Veg",
+                nature: document.getElementById("fnat").value,
+                expires: selectedExpiry,
+                address: document.getElementById("fa").value
+            });
+
+            if(!data.ok){
+                alert(data.error);
+                return false;
+            }
+            // Reset form
+            document.forms[0].reset();
+            selectedExpiry = null;
+            document.getElementById("expiry-display").textContent = "";
+            document.querySelectorAll("#quick-btns button").forEach(b => b.classList.remove("sel"));
+            document.getElementById("custom-wrap").style.display = "none";
+            showRows();
+            return false;
+        }
+
+        async function showRows(){
+            let list = await api("/api/food/mine");
+            let html = "";
+            for(let i=0;i<list.length;i++){
+                let f = list[i];
+
+                // Auto-expire check
+                let isExpired = (f.status === "expired") || (new Date(f.expires) <= new Date() && f.status !== "picked_up");
+                let statusKey = isExpired ? "expired" : f.status;
+
+                let action = '<button class="red" onclick="removeFood(\''+f._id+'\')">Remove</button>';
+                if(statusKey === "claimed"){
+                    action = '<div style="margin-bottom:6px;"><input id="c'+f._id+'" type="text" maxlength="4" placeholder="Code" style="width:70px;text-align:center;font-weight:bold;"> '+
+                             '<button onclick="confirmPickup(\''+f._id+'\')" style="background-color:#16a34a;padding:8px 12px;font-size:13px;">Confirm Pickup</button></div> '+action;
+                }
+
+                let statusBadge = "";
+                if(statusKey === "picked_up"){
+                    statusBadge = '<span class="badge picked_up">Picked Up</span>';
+                } else if(statusKey === "expired"){
+                    statusBadge = '<span class="badge expired">Expired</span>';
+                } else if(statusKey === "claimed"){
+                    statusBadge = '<span class="badge claimed">Yet to Pick Up</span>';
+                } else {
+                    statusBadge = '<span class="badge available">' + esc(statusKey) + '</span>';
+                }
+
+                let claimerCol = "";
+                if((statusKey === "claimed" || statusKey === "picked_up") && f.claimer && f.claimer.name){
+                    claimerCol = '<b>' + esc(f.claimer.name) + '</b><br>'+
+                                 '<small style="color:#2563eb;">📞 ' + esc(f.claimer.phone || "-") + '</small><br>'+
+                                 '<span style="font-size:11px;color:#64748b;">' + esc(f.claimer.kind || "NGO") + '</span>';
+                } else if(statusKey === "expired"){
+                    claimerCol = '<span style="color:#dc2626;font-size:12px;">Expired</span>';
+                } else {
+                    claimerCol = '<span style="color:#94a3b8;font-size:12px;">Not claimed</span>';
+                }
+
+                html += '<tr>'+
+                    '<td><b>'+esc(f.name)+'</b></td>'+
+                    '<td>'+f.servings+'</td>'+
+                    '<td>'+fmt(f.expires)+'</td>'+
+                    '<td>'+statusBadge+'</td>'+
+                    '<td><span class="badge '+f.approval+'">'+f.approval+'</span>'+(f.inspectNote ? '<br><small>'+esc(f.inspectNote)+'</small>' : '')+'</td>'+
+                    '<td>'+claimerCol+'</td>'+
+                    '<td>'+action+'</td>'+
+                    '</tr>';
+            }
+            document.getElementById("rows").innerHTML = html;
+        }
+
+        // donor types the 4-digit code the claimer shows
+        async function confirmPickup(id){
+            let typed = document.getElementById("c"+id).value;
+            let data = await api("/api/food/"+id+"/pickup", "POST", { code: typed });
+            if(data.ok){
+                showRows();
+            }else{
+                alert(data.error);
+            }
+        }
+
+        async function removeFood(id){
+            if(!confirm("Remove this listing?")){ return; }
+            await api("/api/food/"+id, "DELETE");
+            showRows();
+        }
+    </script>
+</body>
+</html>

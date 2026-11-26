@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claim Food</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="hdr"></header>
+
+    <div class="box">
+        <h2>CLAIM FORM</h2>
+        <p class="center" id="what"></p>
+
+        <form onsubmit="return submitClaim(event)">
+            <div class="grid2">
+                <input id="un" type="text" placeholder="Enter Full name" required pattern="[A-Za-z\s]+" title="enter valid name">
+                <input id="uph" type="tel" placeholder="Enter Phone number" required pattern="[6-9][0-9]{9}" title="enter valid phone number">
+                <input id="um" type="email" placeholder="Enter Email" required title="enter valid email">
+                <select id="ut" required>
+                    <option value="" disabled selected>Choose Claimer Type</option>
+                    <option>NGO</option>
+                    <option>Individual</option>
+                    <option>Student</option>
+                </select>
+            </div>
+            <div class="center"><button type="submit">Claim Food</button></div>
+        </form>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        let fid = sessionStorage.getItem("fid");
+        start();
+
+        async function start(){
+            let me = await requireRole("ngo");
+            if(me == null){ return; }
+            showNav();
+
+            // fill the name and email from the login
+            document.getElementById("un").value = me.name;
+            if (me.email) {
+                document.getElementById("um").value = me.email;
+            }
+
+            let food = await api("/api/food/approved");
+            let item = food.find(function(x){ return x._id == fid; });
+
+            if(item == null || item.status != "available"){
+                window.location.href = "home.html";
+            }else{
+                document.getElementById("what").innerHTML =
+                    "You are claiming: <b>"+esc(item.name)+"</b> ("+item.servings+" servings)";
+            }
+        }
+
+        async function submitClaim(e){
+            e.preventDefault();
+
+            // the server checks again, in case someone else claimed it meanwhile
+            let data = await api("/api/food/"+fid+"/claim", "POST", {
+                name:  document.getElementById("un").value,
+                phone: document.getElementById("uph").value,
+                mail:  document.getElementById("um").value,
+                kind:  document.getElementById("ut").value
+            });
+
+            if(!data.ok){
+                alert("Sorry, this food is no longer available.");
+                window.location.href = "home.html";
+                return false;
+            }
+            window.location.href = "myreg.html";
+            return false;
+        }
+    </script>
+</body>
+</html>

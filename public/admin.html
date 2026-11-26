@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - FoodLink</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border-bottom: 1px solid #cbd5e1; text-align: left; }
+        th { background-color: #f1f5f9; color: #334155; }
+        select.assign-select { padding: 6px; font-size: 13px; border-radius: 6px; border: 1px solid #94a3b8; }
+
+        /* Chart section styles */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+            gap: 20px;
+            max-width: 1100px;
+            margin: 20px auto;
+            padding: 0 15px;
+        }
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #cbd5e1;
+            padding: 18px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-card h3 {
+            margin: 0 0 12px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 220px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <header id="hdr"></header>
+
+    <div class="stats" id="stats"></div>
+
+    <!-- View Analytics Button (Top Left - revealed when touched/clicked) -->
+    <div style="max-width:1100px; margin:16px auto 6px; padding:0 15px; display:flex; justify-content:flex-start;">
+        <button id="toggle-analytics-btn" onclick="toggleAnalytics()" ontouchstart="toggleAnalytics(event)" style="background:#14532d; color:#ffffff; font-size:14px; font-weight:700; border-radius:8px; padding:10px 18px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:8px; box-shadow:0 2px 6px rgba(0,0,0,0.15); transition:background-color 0.2s;">
+            <span id="analytics-btn-text">📊 View Analytics</span>
+            <span id="analytics-arrow" style="font-size:12px;">▼</span>
+        </button>
+    </div>
+
+    <!-- Visual Representation Charts (Hidden by default, revealed on touch/click) -->
+    <div id="analytics-section" style="display:none; max-width:1100px; margin:8px auto 20px; padding:0 15px;">
+        <h2 style="margin:10px 0 14px; text-align:left; color:#14532d; font-size:18px;">LISTING ANALYTICS & INSIGHTS</h2>
+        <div class="chart-grid" style="margin:0; padding:0;">
+            <div class="chart-card">
+                <h3>Listing Status Breakdown <span id="chart1-badge" style="font-size:12px;color:#64748b;">Live</span></h3>
+                <div class="chart-wrapper">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Inspection Decisions <span id="chart2-badge" style="font-size:12px;color:#64748b;">Live</span></h3>
+                <div class="chart-wrapper">
+                    <canvas id="inspectionChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Veg vs Non-Veg (Cooked & Packaged) <span id="chart3-badge" style="font-size:12px;color:#64748b;">Stacked</span></h3>
+                <div class="chart-wrapper">
+                    <canvas id="mealsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2>ALL LISTINGS & INSPECTOR ASSIGNMENTS</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Food</th>
+                <th>Donor</th>
+                <th>Servings</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Inspection</th>
+                <th>Assign Inspector</th>
+                <th>Claimed by</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+    </table>
+    <br><br>
+
+    <script src="app.js"></script>
+    <script>
+        let currentList = [];
+        let analyticsVisible = false;
+        let chartStatusInstance = null;
+        let chartInspectionInstance = null;
+        let chartMealsInstance = null;
+
+        start();
+
+        async function start(){
+            let me = await requireRole("admin");    // only the admin can see this page
+            if(me == null){ return; }
+            showNav();
+            show();
+        }
+
+        function toggleAnalytics(e){
+            if(e && e.type === "touchstart"){
+                e.preventDefault(); // prevent duplicate click on mobile touch
+            }
+            analyticsVisible = !analyticsVisible;
+            const sec = document.getElementById("analytics-section");
+            const btnText = document.getElementById("analytics-btn-text");
+            const arrow = document.getElementById("analytics-arrow");
+            const btn = document.getElementById("toggle-analytics-btn");
+            if(!sec) return;
+
+            if(analyticsVisible){
+                sec.style.display = "block";
+                if(btnText) btnText.textContent = "📊 Hide Analytics";
+                if(arrow) arrow.textContent = "▲";
+                if(btn) btn.style.backgroundColor = "#16a34a";
+                // Render charts once revealed to compute dimensions accurately
+                setTimeout(() => {
+                    renderCharts(currentList);
+                }, 50);
+            } else {
+                sec.style.display = "none";
+                if(btnText) btnText.textContent = "📊 View Analytics";
+                if(arrow) arrow.textContent = "▼";
+                if(btn) btn.style.backgroundColor = "#14532d";
+            }
+        }
+
+        function renderCharts(list){
+            if(typeof Chart === "undefined") return;
+
+            let availableCount = 0, claimedCount = 0, pickedCount = 0, expiredCount = 0;
+            let approvedCount = 0, pendingCount = 0, rejectedCount = 0;
+            
+            // Stacked Bar breakdown for Veg vs Non-Veg (Cooked vs Packaged)
+            let vegCooked = 0, vegPackaged = 0;
+            let nonVegCooked = 0, nonVegPackaged = 0;
+
+            list.forEach(f => {
+                let isExpired = (f.status === "expired") || (new Date(f.expires) <= new Date() && f.status !== "picked_up");
+                let st = isExpired ? "expired" : f.status;
+
+                if(st === "available") availableCount++;
+                else if(st === "claimed") claimedCount++;
+                else if(st === "picked_up") pickedCount++;
+                else if(st === "expired") expiredCount++;
+
+                if(f.approval === "approved") approvedCount++;
+                else if(f.approval === "rejected") rejectedCount++;
+                else pendingCount++;
+
+                let s = Number(f.servings || 0);
+                let isCooked = (f.nature === "Freshly cooked");
+                if(f.veg){
+                    if(isCooked) vegCooked += s;
+                    else vegPackaged += s;
+                } else {
+                    if(isCooked) nonVegCooked += s;
+                    else nonVegPackaged += s;
+                }
+            });
+
+            // 1. Status Chart
+            const ctx1 = document.getElementById("statusChart");
+            if(ctx1){
+                if(chartStatusInstance) chartStatusInstance.destroy();
+                chartStatusInstance = new Chart(ctx1, {
+                    type: "doughnut",
+                    data: {
+                        labels: ["Available", "Yet to Pick Up", "Picked Up", "Expired"],
+                        datasets: [{
+                            data: [availableCount, claimedCount, pickedCount, expiredCount],
+                            backgroundColor: ["#059669", "#2563eb", "#16a34a", "#dc2626"]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: "bottom" } }
+                    }
+                });
+            }
+
+            // 2. Inspection Chart
+            const ctx2 = document.getElementById("inspectionChart");
+            if(ctx2){
+                if(chartInspectionInstance) chartInspectionInstance.destroy();
+                chartInspectionInstance = new Chart(ctx2, {
+                    type: "doughnut",
+                    data: {
+                        labels: ["Approved", "Pending Review", "Rejected"],
+                        datasets: [{
+                            data: [approvedCount, pendingCount, rejectedCount],
+                            backgroundColor: ["#16a34a", "#d97706", "#dc2626"]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: "bottom" } }
+                    }
+                });
+            }
+
+            // 3. Stacked Bar Chart: Veg & Non-Veg with Freshly Cooked & Packaged partitions
+            const ctx3 = document.getElementById("mealsChart");
+            if(ctx3){
+                if(chartMealsInstance) chartMealsInstance.destroy();
+                chartMealsInstance = new Chart(ctx3, {
+                    type: "bar",
+                    data: {
+                        labels: ["Vegetarian", "Non-Vegetarian"],
+                        datasets: [
+                            {
+                                label: "Freshly Cooked",
+                                data: [vegCooked, nonVegCooked],
+                                backgroundColor: "#16a34a", // Vibrant Green
+                                borderRadius: 4
+                            },
+                            {
+                                label: "Packaged",
+                                data: [vegPackaged, nonVegPackaged],
+                                backgroundColor: "#2563eb", // Vibrant Blue
+                                borderRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: "top",
+                                labels: { boxWidth: 14, font: { weight: "600" } }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx){
+                                        return ` ${ctx.dataset.label}: ${ctx.raw} meals`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: { font: { weight: "bold", size: 13 } }
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                ticks: { precision: 0 }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        async function show(){
+            let [list, inspectors] = await Promise.all([
+                api("/api/admin/food"),
+                api("/api/admin/inspectors")
+            ]);
+
+            list = list || [];
+            currentList = list;
+            inspectors = inspectors || [];
+
+            let meals=0, pending=0, approved=0, rejected=0, claimed=0, expired=0;
+            let rows = "";
+
+            for(let i=0;i<list.length;i++){
+                let f = list[i];
+
+                // Auto-expire check
+                let isExpired = (f.status === "expired") || (new Date(f.expires) <= new Date() && f.status !== "picked_up");
+                let statusKey = isExpired ? "expired" : f.status;
+
+                if(statusKey == "picked_up"){ meals += Number(f.servings); }
+                if(statusKey == "claimed"){ claimed++; }
+                if(statusKey == "expired"){ expired++; }
+                if(f.approval == "pending"){ pending++; }
+                if(f.approval == "approved"){ approved++; }
+                if(f.approval == "rejected"){ rejected++; }
+
+                let action = '<button class="red" onclick="removeFood(\''+f._id+'\')">Remove</button>';
+                // send back to the inspector (only if nobody has claimed it and not expired)
+                if(statusKey == "available" && f.approval != "pending"){
+                    action = '<button class="grey" onclick="reInspect(\''+f._id+'\')">Re-inspect</button> '+action;
+                }
+
+                // Inspector assignment dropdown
+                let assignCol = "";
+                if(f.approval == "pending" && statusKey == "available"){
+                    assignCol = '<select class="assign-select" onchange="assignInspector(\''+f._id+'\', this.value)">';
+                    assignCol += '<option value="">-- Choose Inspector --</option>';
+                    for(let j=0; j<inspectors.length; j++){
+                        let ins = inspectors[j];
+                        let selected = (f.assignedInspector == ins.email) ? 'selected' : '';
+                        assignCol += '<option value="'+esc(ins.email)+'" '+selected+'>'+esc(ins.name)+' ('+esc(ins.email)+')</option>';
+                    }
+                    assignCol += '</select>';
+                    if(f.assignedInspector){
+                        assignCol += '<div style="font-size:11px; color:#16a34a; margin-top:2px;">Assigned</div>';
+                    }
+                } else {
+                    assignCol = f.assignedInspector ? '<span style="font-size:13px; color:#1e293b;">'+esc(f.assignedInspector)+'</span>' : '<span style="color:#94a3b8;">-</span>';
+                }
+
+                // Status Badge Color coding (picked: green, expired: red, yet to pick: blue)
+                let statusBadge = "";
+                if(statusKey === "picked_up"){
+                    statusBadge = '<span class="badge picked_up">Picked Up</span>';
+                } else if(statusKey === "expired"){
+                    statusBadge = '<span class="badge expired">Expired</span>';
+                } else if(statusKey === "claimed"){
+                    statusBadge = '<span class="badge claimed">Yet to Pick Up</span>';
+                } else {
+                    statusBadge = '<span class="badge available">Available</span>';
+                }
+
+                // Claimed by details (who claimed what - full transparency)
+                let claimerDetails = '<span style="color:#94a3b8;">—</span>';
+                if(f.claimer && f.claimer.name){
+                    claimerDetails = '<b style="color:#1e40af;">' + esc(f.claimer.name) + '</b><br>'+
+                                     '<small>📞 <a href="tel:' + esc(f.claimer.phone || "") + '">' + esc(f.claimer.phone || "-") + '</a></small><br>'+
+                                     '<span style="font-size:11px;color:#64748b;">' + esc(f.claimer.kind || "NGO") + (f.claimedAt ? ' &bull; ' + fmt(f.claimedAt) : '') + '</span>';
+                } else if(statusKey === "expired"){
+                    claimerDetails = '<span style="color:#dc2626;font-size:12px;">Expired (Unclaimed)</span>';
+                }
+
+                rows += '<tr>'+
+                    '<td><b>'+esc(f.name)+'</b></td>'+
+                    '<td>'+esc(f.donor)+'</td>'+
+                    '<td>'+f.servings+'</td>'+
+                    '<td>'+fmt(f.expires)+'</td>'+
+                    '<td>'+statusBadge+'</td>'+
+                    '<td><span class="badge '+f.approval+'">'+f.approval+'</span></td>'+
+                    '<td>'+assignCol+'</td>'+
+                    '<td>'+claimerDetails+'</td>'+
+                    '<td>'+action+'</td>'+
+                    '</tr>';
+            }
+            document.getElementById("rows").innerHTML = rows;
+            document.getElementById("stats").innerHTML =
+                "<span>Listings: <b>"+list.length+"</b></span>"+
+                "<span>Pending: <b>"+pending+"</b></span>"+
+                "<span>Approved: <b>"+approved+"</b></span>"+
+                "<span>Yet to Pick Up: <b>"+claimed+"</b></span>"+
+                "<span>Meals Saved: <b>"+meals+"</b></span>"+
+                "<span>Expired: <b>"+expired+"</b></span>";
+
+            // Update charts
+            renderCharts(list);
+        }
+
+        async function assignInspector(foodId, inspectorEmail){
+            if(!inspectorEmail) return;
+            let res = await api("/api/admin/food/" + foodId + "/assign", "POST", { inspectorEmail: inspectorEmail });
+            if(!res.ok){
+                alert(res.error || "Could not assign inspector");
+            } else {
+                alert("Inspector assigned successfully! Notification email sent to " + res.assignedTo + ".");
+                show();
+            }
+        }
+
+        async function removeFood(id){
+            if(!confirm("Remove this listing?")){ return; }
+            await api("/api/admin/food/"+id, "DELETE");
+            show();
+        }
+
+        async function reInspect(id){
+            await api("/api/admin/food/"+id+"/reinspect", "POST");
+            show();
+        }
+    </script>
+</body>
+</html>

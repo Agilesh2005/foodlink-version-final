@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Claims</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="hdr"></header>
+
+    <div id="out"></div>
+
+    <script src="app.js"></script>
+    <script>
+        start();
+
+        async function start(){
+            let me = await requireRole("ngo");
+            if(me == null){ return; }
+            showNav();
+
+            // newest claim first (the server already sorts it)
+            let mine = await api("/api/claims");
+            let html = "";
+
+            for(let i=0; i<mine.length; i++){
+                let f = mine[i];
+
+                // Auto-expire check: if expired date is past and not picked up, mark expired
+                let isExpired = (f.status === "expired") || (new Date(f.expires) <= new Date() && f.status !== "picked_up");
+                let statusKey = isExpired ? "expired" : f.status;
+
+                let cardClass = "box";
+                let statusBadge = "";
+                let codeBanner = "";
+
+                if(statusKey === "picked_up"){
+                    cardClass += " status-box-picked";
+                    statusBadge = '<span class="badge picked_up">Picked Up (Completed)</span>';
+                    codeBanner = '<div style="color:#15803d;font-weight:700;text-align:center;padding:8px;background:#dcfce7;border-radius:8px;margin-bottom:12px;">✅ Food Collected & Verified with Code: ' + esc(f.code) + '</div>';
+                } else if(statusKey === "expired"){
+                    cardClass += " status-box-expired";
+                    statusBadge = '<span class="badge expired">Expired (Missed Pickup)</span>';
+                    codeBanner = '<div style="color:#b91c1c;font-weight:700;text-align:center;padding:8px;background:#fee2e2;border-radius:8px;margin-bottom:12px;">⚠️ Expired on ' + fmt(f.expires) + ' — Food no longer valid for collection</div>';
+                } else {
+                    // claimed = yet to pick up (BLUE)
+                    cardClass += " status-box-claimed";
+                    statusBadge = '<span class="badge claimed">Yet to Pick Up</span>';
+                    codeBanner = '<div class="code">' + esc(f.code) + '</div><p class="center" style="color:#1e40af;font-weight:600;">Show this 4-digit verification code to the donor when collecting.</p>';
+                }
+
+                html += '<div class="' + cardClass + '">'+
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+                    '<h2 style="margin:0;color:#14532d;">' + esc(f.name) + '</h2>'+
+                    statusBadge+
+                    '</div>'+
+                    codeBanner+
+                    '<pre>'+
+                    '<b>STATUS       :</b> ' + (statusKey === "claimed" ? "Yet to Pick Up" : statusKey.replace("_"," ")) + '\n'+
+                    '<b>PICKUP AT    :</b> ' + esc(f.address) + '\n'+
+                    '<b>DONOR        :</b> ' + esc(f.donor) + ' (' + esc(f.phone) + ')\n'+
+                    '<b>EXPIRES      :</b> ' + fmt(f.expires) + '\n'+
+                    '<b>CLAIMED ON   :</b> ' + fmt(f.claimedAt) + '\n'+
+                    '<b>CLAIMER NAME :</b> ' + esc(f.claimer?.name || "-") + '\n'+
+                    '<b>PHONE        :</b> ' + esc(f.claimer?.phone || "-") + '\n'+
+                    '<b>MAIL ID      :</b> ' + esc(f.claimer?.mail || "-") + '\n'+
+                    '<b>TYPE         :</b> ' + esc(f.claimer?.kind || "-") +
+                    '</pre></div>';
+            }
+
+            if(html == ""){
+                html = '<div class="box"><h2>MY CLAIMS</h2><p class="center">Nothing claimed yet.</p></div>';
+            }
+            document.getElementById("out").innerHTML = html;
+        }
+    </script>
+</body>
+</html>
