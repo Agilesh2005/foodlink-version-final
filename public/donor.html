@@ -194,9 +194,8 @@
 
                 let claimerCol = "";
                 if((statusKey === "claimed" || statusKey === "picked_up") && f.claimer && f.claimer.name){
-                    claimerCol = '<b>' + esc(f.claimer.name) + '</b><br>'+
-                                 '<small style="color:#000000;font-weight:700;">📞 <a href="tel:' + esc(f.claimer.phone || "") + '" style="color:#000000 !important;font-weight:700;text-decoration:underline;">' + esc(f.claimer.phone || "-") + '</a></small><br>'+
-                                 '<span style="font-size:11px;color:#64748b;">' + esc(f.claimer.kind || "NGO") + '</span>';
+                    claimerCol = '<b style="color:#111827;">' + esc(f.claimer.name) + '</b><br>'+
+                                 '<span style="font-size:12px;color:#64748b;">' + esc(f.claimer.kind || "NGO") + '</span>';
                 } else if(statusKey === "expired"){
                     claimerCol = '<span style="color:#dc2626;font-size:12px;">Expired</span>';
                 } else {
