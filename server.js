@@ -13,6 +13,7 @@ const {
     notifyNgosBulkFoodAvailable,
     notifyNgosNewDonationListed,
     notifyNgosFoodReminder,
+    notifyNgoExpiryReminder,
     notifyInspectorPassedTask,
     notifyDonorDecision,
     sendPasswordResetEmail,
@@ -546,6 +547,37 @@ app.post("/api/reset-password", async function (req, res) {
 
 // ---------- Donor Routes ----------
 
+
+// Helper to schedule 2 chronological expiry reminder emails to NGOs spaced 45 seconds apart
+// First mail: Sent shortly after approval with MORE expiry time (~2 hours)
+// Second mail: Sent after 45 seconds with LESS expiry time (~1 hour / nearing expiry)
+function scheduleNgoExpiryReminders(food, ngoEmails) {
+    const excludedEmail = (process.env.DONOR_EMAIL || "agileshkalaimani@gmail.com").toLowerCase();
+    const filteredNgoEmails = (ngoEmails || []).filter(e => e && e.toLowerCase() !== excludedEmail);
+    if (filteredNgoEmails.length === 0 || !food) return;
+    ngoEmails = filteredNgoEmails;
+    console.log(`[FoodLink NGO Reminder] Scheduled 30s reminder for food ${food.id} (${food.name}) to ${ngoEmails.length} NGO(s).`);
+
+    // Send reminder 30 seconds after NGOs are notified of the approved listing
+    setTimeout(async () => {
+        try {
+            const supabase = getSupabase();
+            const { data: current, error: fetchErr } = await supabase.from("foods").select("status").eq("id", food.id).single();
+            if (fetchErr) {
+                console.error("[FoodLink NGO Reminder] DB check error:", fetchErr.message);
+            } else if (current && current.status !== "available") {
+                console.log(`[FoodLink NGO Reminder] Food ${food.id} is already ${current.status}. Skipping reminder.`);
+                return;
+            }
+            console.log(`[FoodLink NGO Reminder] Sending 30s unclaimed food reminder to ${ngoEmails.join(", ")}...`);
+            const res = await notifyNgoExpiryReminder(food, ngoEmails);
+            console.log("[FoodLink NGO Reminder] Result:", res?.success ? `Sent (${res.id})` : JSON.stringify(res));
+        } catch (err) {
+            console.error("[FoodLink NGO Reminder Error]:", err.message);
+        }
+    }, 30000);
+}
+
 app.post("/api/food", needRole("donor"), async function (req, res) {
     const b = req.body;
     if (new Date(b.expires) <= new Date()) {
@@ -612,20 +644,7 @@ app.post("/api/food", needRole("donor"), async function (req, res) {
             console.log("[FoodLink] Admin notification sent successfully | ID:", result.id);
         }
 
-        // Trigger Notification to NGOs: Alert all registered NGOs that a new food donation is listed
-        try {
-            const { data: ngos } = await supabase
-                .from("users")
-                .select("email")
-                .eq("role", "ngo");
-            const ngoEmails = (ngos || []).map(n => n.email).filter(Boolean);
-            if (ngoEmails.length > 0) {
-                console.log("[FoodLink] Sending new donation listing alert to NGOs:", ngoEmails.join(", "));
-                await notifyNgosNewDonationListed(newFood || foodPayload, ngoEmails);
-            }
-        } catch (ngoErr) {
-            console.error("[FoodLink] NGO notification error on food create:", ngoErr.message);
-        }
+        // Note: NGOs are NOT notified at donor submission. They are ONLY notified after inspector inspection and approval.
     } catch (mailErr) {
         console.error("[FoodLink] Email notification error on donation create:", mailErr.message);
     }
@@ -965,13 +984,15 @@ app.post("/api/food/:id/inspect", needRole("inspector"), async function (req, re
 
             const ngoEmails = (ngos || []).map(n => n.email).filter(Boolean);
             console.log("[FoodLink] Sending NGO bulk notification to:", ngoEmails.join(", "));
-            if (ngoEmails.length > 0) {
+                        if (ngoEmails.length > 0) {
                 const result = await notifyNgosBulkFoodAvailable(updatedFood, ngoEmails);
                 if (!result || !result.success) {
                     console.error("[FoodLink] NGO bulk email failed:", result?.error || result?.results || "unknown");
                 } else {
                     console.log("[FoodLink] NGO bulk notification sent successfully");
                 }
+                // Schedule chronological reminders: first mail (more expiry time), then after 45s (less expiry time)
+                scheduleNgoExpiryReminders(updatedFood, ngoEmails);
             }
         } catch (mailErr) {
             console.error("[FoodLink] NGO bulk food email error:", mailErr.message);
