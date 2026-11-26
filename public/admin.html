@@ -347,8 +347,8 @@
                 // Claimed by details (who claimed what - full transparency)
                 let claimerDetails = '<span style="color:#94a3b8;">—</span>';
                 if(f.claimer && f.claimer.name){
-                    claimerDetails = '<b style="color:#1e40af;">' + esc(f.claimer.name) + '</b><br>'+
-                                     '<small>📞 <a href="tel:' + esc(f.claimer.phone || "") + '">' + esc(f.claimer.phone || "-") + '</a></small><br>'+
+                    claimerDetails = '<b style="color:#111827;">' + esc(f.claimer.name) + '</b><br>'+
+                                '<small style="color:#000000;font-weight:700;">📞 <a href="tel:' + esc(f.claimer.phone || "") + '" style="color:#000000 !important;font-weight:700;text-decoration:underline;">' + esc(f.claimer.phone || "-") + '</a></small><br>'+
                                      '<span style="font-size:11px;color:#64748b;">' + esc(f.claimer.kind || "NGO") + (f.claimedAt ? ' &bull; ' + fmt(f.claimedAt) : '') + '</span>';
                 } else if(statusKey === "expired"){
                     claimerDetails = '<span style="color:#dc2626;font-size:12px;">Expired (Unclaimed)</span>';
@@ -385,7 +385,7 @@
             if(!res.ok){
                 alert(res.error || "Could not assign inspector");
             } else {
-                alert("Inspector assigned successfully! Notification email sent to " + res.assignedTo + ".");
+                showNotice("Inspector assigned successfully.", "Success", "success");
                 show();
             }
         }

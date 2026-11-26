@@ -59,7 +59,7 @@ async function api(url, method, body){
         return await res.json();
     } catch (err) {
         console.error("Network error connecting to API:", err);
-        return { ok: false, error: "Cannot connect to server. Ensure 'npm start' is running and open http://localhost:3000" };
+        return { ok: false, error: "Unable to connect to server. Please try again." };
     } finally {
         if(!silent){ _loaderHide(); }
     }
@@ -136,3 +136,78 @@ function esc(t){
 function fmt(d){
     return new Date(d).toLocaleString();
 }
+
+
+// ── Professional In-App Notice & Modal Dialogs ────────────────────────────────
+function showNotice(message, title, type, callback){
+    var overlay = document.getElementById("fl-modal-overlay");
+    if(!overlay){
+        overlay = document.createElement("div");
+        overlay.id = "fl-modal-overlay";
+        overlay.className = "fl-modal-overlay";
+        overlay.innerHTML = '<div class="fl-modal-card">' +
+            '<div class="fl-modal-icon" id="fl-modal-icon"></div>' +
+            '<h3 class="fl-modal-title" id="fl-modal-title"></h3>' +
+            '<p class="fl-modal-msg" id="fl-modal-msg"></p>' +
+            '<div class="fl-modal-actions" id="fl-modal-actions"></div>' +
+        '</div>';
+        document.body.appendChild(overlay);
+    }
+
+    var str = String(message || "");
+    var isError = (type === "error" || str.toLowerCase().includes("error") || str.toLowerCase().includes("could not") || str.toLowerCase().includes("invalid") || str.toLowerCase().includes("sorry") || str.toLowerCase().includes("fail"));
+    var iconEl = document.getElementById("fl-modal-icon");
+    var titleEl = document.getElementById("fl-modal-title");
+    var msgEl = document.getElementById("fl-modal-msg");
+    var actionsEl = document.getElementById("fl-modal-actions");
+
+    iconEl.className = "fl-modal-icon " + (isError ? "error" : "success");
+    iconEl.innerHTML = isError ? "&#10005;" : "&#10003;";
+    titleEl.textContent = title || (isError ? "Notice" : "Success");
+    msgEl.textContent = str;
+
+    actionsEl.innerHTML = '<button class="fl-modal-btn primary" id="fl-modal-ok">OK</button>';
+    document.getElementById("fl-modal-ok").onclick = function(){
+        overlay.classList.remove("active");
+        if(typeof callback === "function"){ callback(); }
+    };
+
+    overlay.classList.add("active");
+}
+
+function showConfirm(message, title, onConfirm, onCancel){
+    var overlay = document.getElementById("fl-modal-overlay");
+    if(!overlay){
+        showNotice(message);
+        overlay = document.getElementById("fl-modal-overlay");
+    }
+
+    var iconEl = document.getElementById("fl-modal-icon");
+    var titleEl = document.getElementById("fl-modal-title");
+    var msgEl = document.getElementById("fl-modal-msg");
+    var actionsEl = document.getElementById("fl-modal-actions");
+
+    iconEl.className = "fl-modal-icon info";
+    iconEl.innerHTML = "?";
+    titleEl.textContent = title || "Confirm Action";
+    msgEl.textContent = message || "Are you sure you want to proceed?";
+
+    actionsEl.innerHTML = '<button class="fl-modal-btn secondary" id="fl-modal-cancel">Cancel</button>' +
+        '<button class="fl-modal-btn primary" id="fl-modal-yes">Confirm</button>';
+
+    document.getElementById("fl-modal-cancel").onclick = function(){
+        overlay.classList.remove("active");
+        if(typeof onCancel === "function"){ onCancel(); }
+    };
+    document.getElementById("fl-modal-yes").onclick = function(){
+        overlay.classList.remove("active");
+        if(typeof onConfirm === "function"){ onConfirm(); }
+    };
+
+    overlay.classList.add("active");
+}
+
+// Override native alert so ugly browser title bars (http://localhost:3000 says:) never show
+window.alert = function(msg){
+    showNotice(msg);
+};

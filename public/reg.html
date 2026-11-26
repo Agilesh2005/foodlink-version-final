@@ -15,18 +15,12 @@
         <p class="center" id="what"></p>
 
         <form onsubmit="return submitClaim(event)">
-            <div class="grid2">
-                <input id="un" type="text" placeholder="Enter Full name" required pattern="[A-Za-z\s]+" title="enter valid name">
-                <input id="uph" type="tel" placeholder="Enter Phone number" required pattern="[6-9][0-9]{9}" title="enter valid phone number">
-                <input id="um" type="email" placeholder="Enter Email" required title="enter valid email">
-                <select id="ut" required>
-                    <option value="" disabled selected>Choose Claimer Type</option>
-                    <option>NGO</option>
-                    <option>Individual</option>
-                    <option>Student</option>
-                </select>
+            <div style="display:flex; flex-direction:column; gap:12px; max-width:440px; margin:0 auto 16px;">
+                <input id="un" type="text" placeholder="NGO / Representative Name" required pattern="[A-Za-z\s]+" title="Enter valid name" style="padding:10px 14px; font-size:15px; border:1px solid #cbd5e1; border-radius:6px;">
+                <input id="uph" type="tel" placeholder="Contact Phone Number" required pattern="[6-9][0-9]{9}" title="Enter 10-digit phone number" style="padding:10px 14px; font-size:15px; border:1px solid #cbd5e1; border-radius:6px;">
+                <input id="um" type="email" placeholder="Official Email Address" required title="Enter valid email" style="padding:10px 14px; font-size:15px; border:1px solid #cbd5e1; border-radius:6px;">
             </div>
-            <div class="center"><button type="submit">Claim Food</button></div>
+            <div class="center"><button type="submit" style="padding:10px 28px; font-size:15px;">Confirm Claim</button></div>
         </form>
     </div>
 
@@ -65,12 +59,11 @@
                 name:  document.getElementById("un").value,
                 phone: document.getElementById("uph").value,
                 mail:  document.getElementById("um").value,
-                kind:  document.getElementById("ut").value
+                kind: "NGO"
             });
 
             if(!data.ok){
-                alert("Sorry, this food is no longer available.");
-                window.location.href = "home.html";
+                showNotice("This food listing has already been claimed or is no longer available.", "Notice", "error", function(){ window.location.href = "home.html"; });
                 return false;
             }
             window.location.href = "myreg.html";

@@ -119,7 +119,7 @@
             if(!res.ok){
                 alert(res.error || "Could not pass inspection task.");
             } else {
-                alert("Task successfully passed to " + res.passedTo + "! Notification email sent.");
+                showNotice("Task forwarded to " + res.passedTo + ".", "Success", "success");
                 show();
             }
         }

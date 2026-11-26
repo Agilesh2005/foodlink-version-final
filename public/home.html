@@ -71,7 +71,7 @@
                     claimerInfo =
                         '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 10px;margin:8px 0;font-size:13px;line-height:1.5;">'+
                         '<b style="color:#1e40af;">Claimed By:</b> ' + esc(f.claimer.name) + '<br>'+
-                        '<b>Contact:</b> <a href="tel:' + esc(f.claimer.phone || "") + '" style="color:#2563eb;font-weight:600;">' + esc(f.claimer.phone || "-") + '</a> (' + esc(f.claimer.kind || "NGO") + ')<br>'+
+                        '<b>Contact:</b> <a href="tel:' + esc(f.claimer.phone || "") + '" style="color:#000000 !important;font-weight:700;text-decoration:underline;">' + esc(f.claimer.phone || "-") + '</a><br>'+
                         (f.claimedAt ? '<span style="font-size:11px;color:#64748b;">Claimed at: ' + fmt(f.claimedAt) + '</span>' : '')+
                         '</div>';
                 }

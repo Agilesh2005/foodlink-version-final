@@ -611,6 +611,21 @@ app.post("/api/food", needRole("donor"), async function (req, res) {
         } else {
             console.log("[FoodLink] Admin notification sent successfully | ID:", result.id);
         }
+
+        // Trigger Notification to NGOs: Alert all registered NGOs that a new food donation is listed
+        try {
+            const { data: ngos } = await supabase
+                .from("users")
+                .select("email")
+                .eq("role", "ngo");
+            const ngoEmails = (ngos || []).map(n => n.email).filter(Boolean);
+            if (ngoEmails.length > 0) {
+                console.log("[FoodLink] Sending new donation listing alert to NGOs:", ngoEmails.join(", "));
+                await notifyNgosNewDonationListed(newFood || foodPayload, ngoEmails);
+            }
+        } catch (ngoErr) {
+            console.error("[FoodLink] NGO notification error on food create:", ngoErr.message);
+        }
     } catch (mailErr) {
         console.error("[FoodLink] Email notification error on donation create:", mailErr.message);
     }
@@ -800,16 +815,22 @@ app.get("/api/inspections", needRole("inspector"), async function (req, res) {
 // Inspector passes task to the other inspector (allowed only once per task)
 app.post("/api/food/:id/pass", needRole("inspector"), async function (req, res) {
     const supabase = getSupabase();
-    const currentEmail = req.session.user.email || req.session.user.username;
+    const currentEmail = (req.session.user.email || req.session.user.username || "").toLowerCase().trim();
 
     // Only the current assignee can pass, and only once
     const { data: current } = await supabase
         .from("foods")
-        .select("assigned_inspector, passed_by")
+        .select("id, name, servings, veg, nature, expires, address, phone, donor, donor_user, assigned_inspector, passed_by")
         .eq("id", req.params.id)
         .maybeSingle();
 
-    if (!current || current.assigned_inspector !== currentEmail) {
+    if (!current) {
+        return res.status(404).json({ ok: false, error: "Listing not found." });
+    }
+
+    const assigned = (current.assigned_inspector || "").toLowerCase().trim();
+    if (assigned !== currentEmail) {
+        console.warn(`[FoodLink] Pass denied: task assigned to '${assigned}', caller is '${currentEmail}'`);
         return res.status(403).json({ ok: false, error: "This task is not assigned to you." });
     }
     if (current.passed_by) {
@@ -828,37 +849,62 @@ app.post("/api/food/:id/pass", needRole("inspector"), async function (req, res) 
     }
 
     const targetInspector = otherInspectors[0];
+    const passerName = req.session.user.name || "Inspector";
+
+    console.log(`[FoodLink] Reassigning food '${current.name}' from ${currentEmail} to ${targetInspector.email}...`);
 
     // Reassign food to the other inspector and record who passed it
     const { data: updatedFood, error: updateErr } = await supabase
         .from("foods")
         .update({
             assigned_inspector: targetInspector.email,
-            passed_by: req.session.user.name
+            passed_by: passerName
         })
         .eq("id", req.params.id)
-        .eq("assigned_inspector", currentEmail)
-        .is("passed_by", null)
         .select()
         .single();
 
     if (updateErr || !updatedFood) {
-        return res.status(500).json({ ok: false, error: "Could not pass inspection task." });
+        console.error("[FoodLink] Update error passing task:", updateErr?.message);
+        return res.status(500).json({ ok: false, error: "Could not pass inspection task in database." });
     }
 
-    // Trigger Notification: Email the other inspector that task was transferred
+    // 1. Email the other inspector that task was transferred
     try {
-        await notifyInspectorPassedTask(
+        console.log(`[FoodLink] Sending pass task email to other inspector: ${targetInspector.email}...`);
+        const passResult = await notifyInspectorPassedTask(
             targetInspector.email,
             targetInspector.name,
-            req.session.user.name,
+            passerName,
             updatedFood
         );
+        console.log("[FoodLink] Pass email dispatch status:", passResult?.success ? "SENT" : passResult?.error);
     } catch (mailErr) {
         console.error("[FoodLink] Error emailing other inspector:", mailErr.message);
     }
 
-    // Notify donor that food is being re-reviewed
+    // 2. Alert Admin that task was transferred between inspectors
+    try {
+        const adminEmail = process.env.ADMIN_EMAIL || "26mx128@psgtech.ac.in";
+        console.log(`[FoodLink] Alerting admin of pass at ${adminEmail}...`);
+        await sendMail({
+            to: adminEmail,
+            subject: `[Admin Alert] Inspection Task Forwarded: ${updatedFood.name} (from ${passerName} to ${targetInspector.name})`,
+            html: layout({
+                headerColor: "#b45309",
+                headerLabel: "Task Reassignment Notice",
+                title: "Inspection Task Forwarded",
+                preheader: `${passerName} forwarded ${updatedFood.name} to ${targetInspector.name}`,
+                body: `<p>Inspector <strong>${passerName}</strong> was unable to inspect <strong>${updatedFood.name}</strong> (${updatedFood.servings} servings at ${updatedFood.address}) and has forwarded the task to <strong>${targetInspector.name}</strong> (${targetInspector.email}).</p>`,
+                ctaText: "Open Admin Dashboard",
+                ctaUrl: `${process.env.APP_URL || "https://apexinterview.in"}/admin.html`
+            })
+        });
+    } catch (adminMailErr) {
+        console.error("[FoodLink] Admin pass notification error:", adminMailErr.message);
+    }
+
+    // 3. Notify donor that food is being re-reviewed
     if (updatedFood && updatedFood.donor_user) {
         try {
             const { data: donor } = await supabase
@@ -876,7 +922,7 @@ app.post("/api/food/:id/pass", needRole("inspector"), async function (req, res) 
                     donorName,
                     updatedFood,
                     "passed",
-                    { inspectorName: req.session.user.name, passedTo: targetInspector.name }
+                    { inspectorName: passerName, passedTo: targetInspector.name }
                 );
             }
         } catch (mailErr) {
@@ -910,7 +956,7 @@ app.post("/api/food/:id/inspect", needRole("inspector"), async function (req, re
     }
 
     // Trigger Notification 3: If approved and servings > 50, notify all NGOs
-    if (req.body.ok && updatedFood && Number(updatedFood.servings) > 50) {
+    if (req.body.ok && updatedFood) {
         try {
             const { data: ngos } = await supabase
                 .from("users")

@@ -553,15 +553,8 @@ async function notifyInspectorPassedTask(toEmail, toName, fromName, food) {
 // NOTIFICATION 5 — Donor: Their food was accepted / rejected / passed
 // ═══════════════════════════════════════════════════════════════════════════════
 async function notifyDonorDecision(donorEmail, donorName, food, decision, { inspectorName, reason, passedTo } = {}) {
-    if (!donorEmail) return { success: false, error: "No donor email" };
-
-    // Quota optimization: Only agileshkalaimani@gmail.com receives donor notifications.
-    // Notifications for all other donors are skipped to prevent quota exhaustion.
-    const allowedDonor = (process.env.DONOR_EMAIL || "agileshkalaimani@gmail.com").toLowerCase().trim();
-    if (donorEmail.toLowerCase().trim() !== allowedDonor) {
-        console.log(`[FoodLink Email] Skipping donor email to ${donorEmail} (only ${allowedDonor} receives donor notifications to protect quota).`);
-        return { success: true, skipped: true };
-    }
+    const targetEmail = donorEmail || process.env.DONOR_EMAIL || "agileshkalaimani@gmail.com";
+    if (!targetEmail) return { success: false, error: "No donor email" };
 
     const decidedAt = new Date().toLocaleString("en-IN", {
         timeZone: "Asia/Kolkata", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"

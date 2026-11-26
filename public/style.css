@@ -157,3 +157,117 @@ table{ width:95%; max-width:1100px; margin:auto; background-color:white; border-
 th{ background-color:#14532d; color:white; }
 th, td{ border:1px solid #cbd5e1; padding:8px; text-align:center; }
 td input{ width:70px; padding:5px; display:inline-block; }
+
+
+/* Ensure links, phone numbers and claimer details inside tables and cards are crisp black */
+td a, .card a.phone-link, .claimer-phone {
+    color: #000000 !important;
+    font-weight: 700 !important;
+    text-decoration: underline;
+}
+
+
+/* Ensure links, phone numbers and claimer details inside tables and cards are crisp black */
+td a, .card a.phone-link, .claimer-phone, a.phone-link {
+    color: #000000 !important;
+    font-weight: 700 !important;
+    text-decoration: underline;
+}
+
+
+/* ─── Professional Modal & Notification System ────────────────────── */
+.fl-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+.fl-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+.fl-modal-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    max-width: 420px;
+    width: 90%;
+    padding: 26px 24px 20px;
+    text-align: center;
+    transform: scale(0.94);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid #e2e8f0;
+}
+.fl-modal-overlay.active .fl-modal-card {
+    transform: scale(1);
+}
+.fl-modal-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+    font-size: 24px;
+    font-weight: 700;
+}
+.fl-modal-icon.success {
+    background: #dcfce7;
+    color: #16a34a;
+}
+.fl-modal-icon.error {
+    background: #fee2e2;
+    color: #dc2626;
+}
+.fl-modal-icon.info {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+.fl-modal-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 8px;
+}
+.fl-modal-msg {
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.5;
+    margin: 0 0 22px;
+}
+.fl-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+.fl-modal-btn {
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+}
+.fl-modal-btn.primary {
+    background: #16a34a;
+    color: #ffffff;
+}
+.fl-modal-btn.primary:hover {
+    background: #15803d;
+}
+.fl-modal-btn.secondary {
+    background: #f1f5f9;
+    color: #475569;
+}
+.fl-modal-btn.secondary:hover {
+    background: #e2e8f0;
+}
