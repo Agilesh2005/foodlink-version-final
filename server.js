@@ -556,7 +556,7 @@ function scheduleNgoExpiryReminders(food, ngoEmails) {
     const filteredNgoEmails = (ngoEmails || []).filter(e => e && e.toLowerCase() !== excludedEmail);
     if (filteredNgoEmails.length === 0 || !food) return;
     ngoEmails = filteredNgoEmails;
-    console.log(`[FoodLink NGO Reminder] Scheduled 30s reminder for food ${food.id} (${food.name}) to ${ngoEmails.length} NGO(s).`);
+    console.log(`[FoodLink NGO Reminder] Scheduled 5s reminder for food ${food.id} (${food.name}) to ${ngoEmails.length} NGO(s).`);
 
     // Send reminder 30 seconds after NGOs are notified of the approved listing
     setTimeout(async () => {
@@ -569,13 +569,13 @@ function scheduleNgoExpiryReminders(food, ngoEmails) {
                 console.log(`[FoodLink NGO Reminder] Food ${food.id} is already ${current.status}. Skipping reminder.`);
                 return;
             }
-            console.log(`[FoodLink NGO Reminder] Sending 30s unclaimed food reminder to ${ngoEmails.join(", ")}...`);
+            console.log(`[FoodLink NGO Reminder] Sending 5s unclaimed food reminder to ${ngoEmails.join(", ")}...`);
             const res = await notifyNgoExpiryReminder(food, ngoEmails);
             console.log("[FoodLink NGO Reminder] Result:", res?.success ? `Sent (${res.id})` : JSON.stringify(res));
         } catch (err) {
             console.error("[FoodLink NGO Reminder Error]:", err.message);
         }
-    }, 30000);
+    }, 5000);
 }
 
 app.post("/api/food", needRole("donor"), async function (req, res) {
