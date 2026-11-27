@@ -688,7 +688,7 @@ app.post("/api/food/:id/pickup", needRole("donor"), async function (req, res) {
         return res.json({ ok: false, error: "Listing not found or not in claimed status." });
     }
     if (String(req.body.code).trim() !== String(f.code).trim()) {
-        return res.json({ ok: false, error: "Wrong pickup verification code." });
+        return res.json({ ok: false, error: "Wrong OTP." });
     }
 
     const { error: updateErr } = await supabase
